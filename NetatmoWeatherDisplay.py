@@ -4,7 +4,7 @@ import pprint
 
 from NetatmoAccess import NetatmoAccess
 
-name = "WeatherDisplay.py"
+name = "NetatmoWeatherDisplay.py"
 
 pp = pprint.PrettyPrinter()
 
