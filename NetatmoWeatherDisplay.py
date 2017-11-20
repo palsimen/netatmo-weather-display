@@ -2,10 +2,12 @@ import argparse
 import logging
 import time
 
+import ZeroSeg.led as led
+
 from NetatmoAccess import NetatmoAccess
 
 NAME = "NetatmoWeatherDisplay.py"
-UPDATE_INTERVAL = 5
+UPDATE_INTERVAL = 60
 
 log = logging.getLogger(NAME)
 
@@ -29,19 +31,30 @@ netatmo = NetatmoAccess(username=args.username,
                         client_id=args.client_id,
                         client_secret=args.client_secret)  
 
+if not args.nodisplay:
+    display = led.sevensegment()
+
 while True:
     netatmo.update()
     try:
         indoor = netatmo.get('Indoor')
-        outdoor = netatmo.get('Outdoor module')
+        outdoor = netatmo.get('Outdoor')
+
+        # Create 8 char display text
+        indoor_temp = indoor['Temperature']
+        outdoor_temp = outdoor['Temperature']
+        indoor_temp_round = str(int(round(indoor_temp)))
+        outdoor_temp_round = str(int(round(outdoor_temp)))
+        weather_summary = '{:4}'.format(indoor_temp_round) + '{:>4}'.format(outdoor_temp_round)
 
         # Display in terminal
         if args.nodisplay:
-            print "Inne: " + str(indoor['Temperature'])
-            print "Ute: " + str(outdoor['Temperature'])
+            print weather_summary
         # Display on zero seg
         else:
-            print "Zero seg"
+            log.debug('Updating zero seg')
+            display.clear()
+            display.write_text(0, weather_summary)
 
     except KeyError, error:
         print 'Could not find module name. Error:', error
