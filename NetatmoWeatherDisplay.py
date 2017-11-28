@@ -9,16 +9,18 @@ from NetatmoAccess import NetatmoAccess
 NAME = "NetatmoWeatherDisplay.py"
 # Update interval in secs
 UPDATE_INTERVAL = 60
+ONE_SECOND = 1
 ZERO_SEG_MAX_CHARS = 8
 DEVICE_ID = 0
+DISPLAY_BRIGHTNESS = 4
 
 log = logging.getLogger(NAME)
 
 def write_display(display, text):
-"""
-Function to write to the zero seg display and not use
-a separate char for displaying a '.'.
-"""
+    """
+    Function to write to the zero seg display and not use
+    a separate char for displaying a '.'.
+    """
     dot_pos = []
     # Iterate through text and store position of '.'
     for idx, char in enumerate(text):
@@ -63,6 +65,8 @@ netatmo = NetatmoAccess(username=args.username,
 
 if not args.nodisplay:
     display = led.sevensegment()
+    # Set the brightness
+    display.brightness(DISPLAY_BRIGHTNESS)
 
 while True:
     netatmo.update()
@@ -93,8 +97,15 @@ while True:
     except KeyError, error:
         print 'Could not find module name. Error:', error
 
-    
-
-    time.sleep(UPDATE_INTERVAL)
+    # For loop to execute every second to serve as 'live indicator' on the display.
+    # If app stops, the last text on display stays on the display.
+    live_indicator = False
+    for idx in xrange(0, UPDATE_INTERVAL):
+        time.sleep(ONE_SECOND)
+        display.letter(deviceId=DEVICE_ID,
+                       position=1,
+                       char=temp_summary[7],
+                       dot=live_indicator,
+                       redraw=False)
 
     
