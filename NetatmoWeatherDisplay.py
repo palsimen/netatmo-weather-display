@@ -10,10 +10,15 @@ NAME = "NetatmoWeatherDisplay.py"
 # Update interval in secs
 UPDATE_INTERVAL = 60
 ZERO_SEG_MAX_CHARS = 8
+DEVICE_ID = 0
 
 log = logging.getLogger(NAME)
 
 def write_display(display, text):
+"""
+Function to write to the zero seg display and not use
+a separate char for displaying a '.'.
+"""
     dot_pos = []
     # Iterate through text and store position of '.'
     for idx, char in enumerate(text):
@@ -25,14 +30,15 @@ def write_display(display, text):
         raise OverflowError('{0} contains too many characters for display'.format(text))
 
     # Write it to the zero seg display
-    for pos, char in enumerate(text):
+    for pos, char in enumerate(text.ljust(8)[::-1]):
         dot = False
         if pos in dot_pos:
             dot = True
-        display.letter(deviceId=0, 
-                       pos=pos, 
+        display.letter(deviceId=DEVICE_ID, 
+                       position=(pos+1), 
                        char=char,
-                       dot=dot)
+                       dot=dot,
+                       redraw=False)
     
 
 parser = argparse.ArgumentParser(description=NAME)
@@ -62,39 +68,33 @@ while True:
     netatmo.update()
     try:
         indoor = netatmo.get('Indoor')
-        indoor2 = netatmo.get('Indoor 2')
         outdoor = netatmo.get('Outdoor')
 
-        # Create 8 char display text
-        indoor_temp = indoor['Temperature']
-        indoor2_temp = indoor2['Temperature']
-        outdoor_temp = outdoor['Temperature']
-        # Summary
-        indoor_temp_round = str(int(round(indoor_temp)))
-        outdoor_temp_round = str(int(round(outdoor_temp)))
-        summary_display = '{:4}'.format(indoor_temp_round) + '{:>4}'.format(outdoor_temp_round)
-        # Indoor
-        indoor_display = '{:4}'.format('In') + '{:>4}'.format('{0:.1f}'.format(indoor_temp))
-        # Indoor 2
-        indoor2_display = '{:4}'.format('In2') + '{:>4}'.format('{0:.1f}'.format(indoor2_temp))
-        # Outdoor
-        outdoor_display = '{:4}'.format('Out') + '{:>4}'.format('{0:.1f}'.format(outdoor_temp))
+        # Force temps to have 1 decimal
+        indoor_temp = '{0:.1f}'.format(float(indoor['Temperature']))
+        outdoor_temp = '{0:.1f}'.format(float(outdoor['Temperature']))
+        # Summary. 5 chars for indoor and 5 for outdoor (incl 2 dots)
+        temp_summary = '{:5}'.format(indoor_temp) + '{:>5}'.format(outdoor_temp)
 
         # Display in terminal
         if args.nodisplay:
-            print summary_display
-            print indoor_display
-            print indoor2_display
-            print outdoor_display
-            write_display(None, '22.2 -12.4')
+            print temp_summary
         # Display on zero seg
         else:
             log.debug('Updating zero seg')
             display.clear()
-            #display.write_text(0, summary_display)
-            write_display(display, '22.2 -12.4')
+            log.debug(temp_summary)
+            try:
+                write_display(display, temp_summary)
+            except OverflowError, error:
+                # TODO: What happens here, aborts? Want to continue
+                display.write_text(DEVICE_ID, 'ERROR')
 
     except KeyError, error:
         print 'Could not find module name. Error:', error
 
+    
+
     time.sleep(UPDATE_INTERVAL)
+
+    
