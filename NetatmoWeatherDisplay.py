@@ -12,7 +12,7 @@ UPDATE_INTERVAL = 60
 ONE_SECOND = 1
 ZERO_SEG_MAX_CHARS = 8
 DEVICE_ID = 0
-DISPLAY_BRIGHTNESS = 4
+DISPLAY_BRIGHTNESS = 1
 
 log = logging.getLogger(NAME)
 
@@ -40,7 +40,7 @@ def write_display(display, text):
                        position=(pos+1), 
                        char=char,
                        dot=dot,
-                       redraw=False)
+                       redraw=True)
     
 
 parser = argparse.ArgumentParser(description=NAME)
@@ -49,7 +49,7 @@ parser.add_argument('--password',      help='password',      required=True)
 parser.add_argument('--client_id',     help='client_id',     required=True)
 parser.add_argument('--client_secret', help='client_secret', required=True)
 parser.add_argument('--nodisplay',     help='run system without zero seg display', action='store_true')
-parser.add_argument('--debug',         help='enable debug logging')
+parser.add_argument('--debug',         help='enable debug logging', action='store_true')
 
 args = parser.parse_args()
 
@@ -78,6 +78,7 @@ while True:
         indoor_temp = '{0:.1f}'.format(float(indoor['Temperature']))
         outdoor_temp = '{0:.1f}'.format(float(outdoor['Temperature']))
         # Summary. 5 chars for indoor and 5 for outdoor (incl 2 dots)
+        # TODO: display_text as list
         temp_summary = '{:5}'.format(indoor_temp) + '{:>5}'.format(outdoor_temp)
 
         # Display in terminal
@@ -102,10 +103,11 @@ while True:
     live_indicator = False
     for idx in xrange(0, UPDATE_INTERVAL):
         time.sleep(ONE_SECOND)
+        live_indicator = not live_indicator
         display.letter(deviceId=DEVICE_ID,
                        position=1,
-                       char=temp_summary[7],
+                       char=temp_summary[len(temp_summary)-1],
                        dot=live_indicator,
-                       redraw=False)
+                       redraw=True)
 
     
