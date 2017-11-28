@@ -9,8 +9,31 @@ from NetatmoAccess import NetatmoAccess
 NAME = "NetatmoWeatherDisplay.py"
 # Update interval in secs
 UPDATE_INTERVAL = 60
+ZERO_SEG_MAX_CHARS = 8
 
 log = logging.getLogger(NAME)
+
+def write_display(display, text):
+    dot_pos = []
+    # Iterate through text and store position of '.'
+    for idx, char in enumerate(text):
+        if char == '.':
+            dot_pos.append((idx-1-len(dot_pos)))
+    # Delete ','
+    text = text.replace('.', '')
+    if len(text) > ZERO_SEG_MAX_CHARS:
+        raise OverflowError('{0} contains too many characters for display'.format(text))
+
+    # Write it to the zero seg display
+    for pos, char in enumerate(text):
+        dot = False
+        if pos in dot_pos:
+            dot = True
+        display.letter(deviceId=0, 
+                       pos=pos, 
+                       char=char,
+                       dot=dot)
+    
 
 parser = argparse.ArgumentParser(description=NAME)
 parser.add_argument('--username',      help='username',      required=True)
@@ -63,11 +86,13 @@ while True:
             print indoor_display
             print indoor2_display
             print outdoor_display
+            write_display(None, '22.2 -12.4')
         # Display on zero seg
         else:
             log.debug('Updating zero seg')
             display.clear()
-            display.write_text(0, summary_display)
+            #display.write_text(0, summary_display)
+            write_display(display, '22.2 -12.4')
 
     except KeyError, error:
         print 'Could not find module name. Error:', error
