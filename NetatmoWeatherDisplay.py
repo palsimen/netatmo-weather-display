@@ -7,6 +7,7 @@ import ZeroSeg.led as led
 from NetatmoAccess import NetatmoAccess
 
 NAME = "NetatmoWeatherDisplay.py"
+
 # Update interval in secs
 UPDATE_INTERVAL = 60
 ONE_SECOND = 1
