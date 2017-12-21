@@ -27,6 +27,7 @@ class NetatmoAccess:
                 response = requests.post("https://api.netatmo.com/api/getstationsdata", params=params)
                 response.raise_for_status()
                 self.__data = response.json()["body"]
+                #print self.__data
             except requests.exceptions.HTTPError as error:
                 print(error.response.status_code, error.response.text)
 

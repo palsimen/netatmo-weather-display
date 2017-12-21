@@ -8,6 +8,13 @@ from NetatmoAccess import NetatmoAccess
 
 NAME = "NetatmoWeatherDisplay.py"
 
+# Errors
+NO_RECENT_DATA_ERROR   = "E0"
+NO_CONNECTION_ERROR    = "E1"
+DISPLAY_OVERFLOW_ERROR = "E2"
+MODULE_NAME_ERROR      = "E2"
+
+
 # Update interval in secs
 UPDATE_INTERVAL = 60
 ONE_SECOND = 1
@@ -82,6 +89,16 @@ while True:
         # TODO: display_text as list
         temp_summary = '{:5}'.format(indoor_temp) + '{:>5}'.format(outdoor_temp)
 
+
+    except KeyError, error:
+        temp_summary = MODULE_NAME_ERROR 
+        print 'Could not find module name. Error:', error
+
+    #except ConnectionError, error
+    #    temp_summary = NO_CONNECTION_ERROR
+    #    print error
+
+    finally:
         # Display in terminal
         if args.nodisplay:
             print temp_summary
@@ -93,11 +110,7 @@ while True:
             try:
                 write_display(display, temp_summary)
             except OverflowError, error:
-                # TODO: What happens here, aborts? Want to continue
-                display.write_text(DEVICE_ID, 'ERROR')
-
-    except KeyError, error:
-        print 'Could not find module name. Error:', error
+                display.write_text(DEVICE_ID, DISPLAY_OVERFLOW_ERROR)
 
     # For loop to execute every second to serve as 'live indicator' on the display.
     # If app stops, the last text on display stays on the display.
@@ -105,10 +118,11 @@ while True:
     for idx in xrange(0, UPDATE_INTERVAL):
         time.sleep(ONE_SECOND)
         live_indicator = not live_indicator
-        display.letter(deviceId=DEVICE_ID,
-                       position=1,
-                       char=temp_summary[len(temp_summary)-1],
-                       dot=live_indicator,
-                       redraw=True)
+        if not args.nodisplay:
+            display.letter(deviceId=DEVICE_ID,
+                           position=1,
+                           char=temp_summary[len(temp_summary)-1],
+                           dot=live_indicator,
+                           redraw=True)
 
     
