@@ -90,9 +90,9 @@ while True:
         temp_summary = '{:5}'.format(indoor_temp) + '{:>5}'.format(outdoor_temp)
 
 
-    except KeyError, error:
+    except KeyError as error:
         temp_summary = MODULE_NAME_ERROR 
-        print 'Could not find module name. Error:', error
+        print("Could not find module name. Error:", error)
 
     #except ConnectionError, error
     #    temp_summary = NO_CONNECTION_ERROR
@@ -101,7 +101,7 @@ while True:
     finally:
         # Display in terminal
         if args.nodisplay:
-            print temp_summary
+            print(temp_summary)
         # Display on zero seg
         else:
             log.debug('Updating zero seg')
@@ -109,7 +109,7 @@ while True:
             log.debug(temp_summary)
             try:
                 write_display(display, temp_summary)
-            except OverflowError, error:
+            except OverflowError as overflowError:
                 display.write_text(DEVICE_ID, DISPLAY_OVERFLOW_ERROR)
 
     # For loop to execute every second to serve as 'live indicator' on the display.
