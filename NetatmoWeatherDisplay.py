@@ -115,7 +115,7 @@ while True:
     # For loop to execute every second to serve as 'live indicator' on the display.
     # If app stops, the last text on display stays on the display.
     live_indicator = False
-    for idx in xrange(0, UPDATE_INTERVAL):
+    for idx in range(0, UPDATE_INTERVAL):
         time.sleep(ONE_SECOND)
         live_indicator = not live_indicator
         if not args.nodisplay:

@@ -50,5 +50,5 @@ class NetatmoAccess:
                     return base['modules'][idx]['dashboard_data']
 
             # Not found, raise exception
-            raise KeyError, 'Module \'' + module_name + '\' not found. Available modules are: ' + ",".join(available_modules)
+            raise KeyError('Module \'' + module_name + '\' not found. Available modules are: ' + ",".join(available_modules))
 
