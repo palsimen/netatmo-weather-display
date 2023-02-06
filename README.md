@@ -12,6 +12,18 @@ python3 NetatmoWeatherDisplay.py --username <username> --password <password> --c
 
 ```
 
+## Start from cron
+```
+# Check every 5th min if NetatmoWeatherDisplay.py is running, otherwise restart it
+*/5 * * * * ~/misc/utils/check_process_and_action.sh -p NetatmoWeatherDisplay.py -a ~/start-netatmo-weather-display
+```
+
+```
+#!/bin/bash
+
+nohup ~/bin/netatmo-weather-display
+```
+
 ## ZeroSeg
 [Link](https://github.com/AverageMaker/ZeroSeg)
 
