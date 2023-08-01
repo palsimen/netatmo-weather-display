@@ -52,10 +52,9 @@ def write_display(display, text):
     
 
 parser = argparse.ArgumentParser(description=NAME)
-parser.add_argument('--username',      help='username',      required=True)
-parser.add_argument('--password',      help='password',      required=True)
 parser.add_argument('--client_id',     help='client_id',     required=True)
 parser.add_argument('--client_secret', help='client_secret', required=True)
+parser.add_argument('--refresh_token', help='refresh_token', required=True)
 parser.add_argument('--nodisplay',     help='run system without zero seg display', action='store_true')
 parser.add_argument('--debug',         help='enable debug logging', action='store_true')
 
@@ -66,10 +65,9 @@ if args.debug:
 else:
     logging.basicConfig(level=logging.ERROR)
 
-netatmo = NetatmoAccess(username=args.username,
-                        password=args.password,
-                        client_id=args.client_id,
-                        client_secret=args.client_secret)  
+netatmo = NetatmoAccess(client_id=args.client_id,
+                        client_secret=args.client_secret,
+                        refresh_token=args.refresh_token)  
 
 if not args.nodisplay:
     display = led.sevensegment()

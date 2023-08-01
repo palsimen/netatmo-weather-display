@@ -1,27 +1,30 @@
 import requests
 
 class NetatmoAccess:
-    def __init__(self, username, password, client_id, client_secret):
-        self.__payload = {'grant_type':    'password',
-                          'username':      username,
-                          'password':      password,
-                          'client_id':     client_id,
-                          'client_secret': client_secret,
-                          'scope': ''}
+    def __init__(self, client_id, client_secret, refresh_token):
+        self.__client_id=client_id
+        self.__client_secret=client_secret
+        self.__refresh_token=refresh_token
 
         self.__data = {}
 
     def update(self):
         try:
-            response = requests.post("https://api.netatmo.com/oauth2/token", data=self.__payload)
+            print("Getting token...")
+            payload = {'grant_type':    'refresh_token',
+                       'refresh_token': self.__refresh_token,
+                       'client_id':     self.__client_id,
+                       'client_secret': self.__client_secret}
+            response = requests.post("https://api.netatmo.com/oauth2/token", data=payload)
             response.raise_for_status()
             access_token=response.json()["access_token"]
-            refresh_token=response.json()["refresh_token"]
+            self.__refresh_token=response.json()["refresh_token"]
             scope=response.json()["scope"]
 
             params = {
                 'access_token': access_token
             }
+            print("...got access_token=" + access_token + ", refesh_token=" + self.__refresh_token)
 
             try:
                 response = requests.post("https://api.netatmo.com/api/getstationsdata", params=params)
