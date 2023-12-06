@@ -12,6 +12,8 @@ python3 NetatmoWeatherDisplay.py --username <username> --password <password> --c
 
 ```
 
+Generate token from netatmo web page and add to file: token.txt
+
 ## Start from cron
 ```
 # Check every 5th min if NetatmoWeatherDisplay.py is running, otherwise restart it
