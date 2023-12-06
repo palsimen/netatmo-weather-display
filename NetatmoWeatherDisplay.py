@@ -16,7 +16,7 @@ MODULE_NAME_ERROR      = "E2"
 
 
 # Update interval in secs
-UPDATE_INTERVAL = 60
+UPDATE_INTERVAL = 300
 ONE_SECOND = 1
 ZERO_SEG_MAX_CHARS = 8
 DEVICE_ID = 0
@@ -54,20 +54,26 @@ def write_display(display, text):
 parser = argparse.ArgumentParser(description=NAME)
 parser.add_argument('--client_id',     help='client_id',     required=True)
 parser.add_argument('--client_secret', help='client_secret', required=True)
-parser.add_argument('--refresh_token', help='refresh_token', required=True)
 parser.add_argument('--nodisplay',     help='run system without zero seg display', action='store_true')
 parser.add_argument('--debug',         help='enable debug logging', action='store_true')
 
 args = parser.parse_args()
 
 if args.debug:
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(
+      format='%(asctime)s %(levelname)-8s %(message)s',
+      level=logging.DEBUG,
+      datefmt='%Y-%m-%d %H:%M:%S')
 else:
     logging.basicConfig(level=logging.ERROR)
 
+# Read token from file
+f = open("/home/pi/netatmo-weather-display/token.txt", "r")
+refresh_token = f.read().rstrip()
+log.debug("Read token from file: " + refresh_token)
 netatmo = NetatmoAccess(client_id=args.client_id,
                         client_secret=args.client_secret,
-                        refresh_token=args.refresh_token)  
+                        refresh_token=refresh_token)  
 
 if not args.nodisplay:
     display = led.sevensegment()

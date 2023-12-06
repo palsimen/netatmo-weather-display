@@ -19,6 +19,10 @@ class NetatmoAccess:
             response.raise_for_status()
             access_token=response.json()["access_token"]
             self.__refresh_token=response.json()["refresh_token"]
+            # Write refresh token to file in case system shytsdown
+            f = open("/home/pi/netatmo-weather-display/token.txt", "w")
+            f.write(self.__refresh_token)
+            f.close()
             scope=response.json()["scope"]
 
             params = {
