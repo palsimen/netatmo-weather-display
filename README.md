@@ -1,5 +1,5 @@
 # netatmo-weather-display
-Weather display for Netatmo weather station using Raspberry Pi
+Weather display for Netatmo weather station using Raspberry Pi and ZeroSeg
 
 App is typically started from a script, e.g:
 
