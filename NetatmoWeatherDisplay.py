@@ -12,15 +12,18 @@ from NetatmoWebhook import WeatherState, start_webhook_server
 
 NAME = "NetatmoWeatherDisplay.py"
 
-# Errors
-NO_RECENT_DATA_ERROR   = "E0"
-NO_CONNECTION_ERROR    = "E1"
-DISPLAY_OVERFLOW_ERROR = "E2"
+# Texts shown instead of temperatures. 7 segments can't draw K, M, W or X,
+# and O, D, S look like 0, 0, 5, hence the odd mix of upper and lower case
+NO_DATA     = "no dAtA"   # no temperatures received yet
+OLD_DATA    = "oLd dAtA"  # nothing new from either module for STALE_AFTER
+NO_READING  = "----"      # one module hasn't reported yet
+OLD_READING = "oLd"       # one module has been quiet for STALE_AFTER
+DISPLAY_OVERFLOW_ERROR = "Err"
 
 # Module names as set in the Netatmo app
 MODULE_NAMES = {'indoor': 'Indoor', 'outdoor': 'Outdoor'}
 
-# Stations report every ~10 min. Show E0 rather than a temperature older than this (secs)
+# Stations report every ~10 min. Show 'oLd' rather than a temperature older than this (secs)
 STALE_AFTER = 30 * 60
 # Wait between retries of failed startup calls to Netatmo (secs). The last one repeats
 RETRY_DELAYS = [30, 60, 120, 300]
@@ -34,7 +37,8 @@ log = logging.getLogger(NAME)
 def write_display(display, text):
     """
     Function to write to the zero seg display and not use
-    a separate char for displaying a '.'.
+    a separate char for displaying a '.'. Text is right-aligned, so its last
+    char is at position 1, where the live indicator blinks.
     """
     # Pair each char with whether a '.' follows it
     chars = []
@@ -45,7 +49,7 @@ def write_display(display, text):
             chars.append((char, False))
     if len(chars) > ZERO_SEG_MAX_CHARS:
         raise OverflowError('{0} contains too many characters for display'.format(text))
-    chars += [(' ', False)] * (ZERO_SEG_MAX_CHARS - len(chars))
+    chars = [(' ', False)] * (ZERO_SEG_MAX_CHARS - len(chars)) + chars
 
     # Write it to the zero seg display. Position 1 is the rightmost char
     for pos, (char, dot) in enumerate(reversed(chars)):
@@ -57,34 +61,45 @@ def write_display(display, text):
 
 
 def format_reading(reading, now):
-    """Temperature with 1 decimal, or E0 if there is no recent reading."""
-    if reading is None or now - reading[1] > STALE_AFTER:
-        return NO_RECENT_DATA_ERROR
+    """Temperature with 1 decimal, or a text if there is no recent reading."""
+    if reading is None:
+        return NO_READING
+    if now - reading[1] > STALE_AFTER:
+        return OLD_READING
     return '{0:.1f}'.format(reading[0])
 
 
 def build_summary(state, now):
     """
     Summary. 4 display chars for indoor and 4 for outdoor. A '.' is drawn on
-    the char before it, so it doesn't take up a char of its own.
+    the char before it, so it doesn't take up a char of its own. When both
+    have the same problem, it's spelled out across the whole display.
     """
     indoor = format_reading(state.get('indoor'), now)
     outdoor = format_reading(state.get('outdoor'), now)
+    if indoor == outdoor == NO_READING:
+        return NO_DATA
+    if indoor == outdoor == OLD_READING:
+        return OLD_DATA
     return indoor.ljust(4 + indoor.count('.')) + outdoor.rjust(4 + outdoor.count('.'))
 
 
 def show(display, summary):
+    """Show summary, and return the text that ended up on the display."""
     # Display in terminal
     if display is None:
         print(summary, flush=True)
+        return summary
     # Display on zero seg
-    else:
-        log.info("Showing '%s'", summary)
-        display.clear()
-        try:
-            write_display(display, summary)
-        except OverflowError:
-            display.write_text(DEVICE_ID, DISPLAY_OVERFLOW_ERROR)
+    log.info("Showing '%s'", summary)
+    display.clear()
+    try:
+        write_display(display, summary)
+        return summary
+    except OverflowError:
+        log.error("'%s' is too long for the display", summary)
+        write_display(display, DISPLAY_OVERFLOW_ERROR)
+        return DISPLAY_OVERFLOW_ERROR
 
 
 def describe(error):
@@ -220,17 +235,18 @@ def main():
     # Redraw when the readings change, otherwise blink a dot every second as
     # 'live indicator'. If app stops, the last text on display stays on the display.
     shown = None
+    on_display = None
     live_indicator = False
     while True:
         summary = build_summary(state, time.time())
         if summary != shown:
-            show(display, summary)
+            on_display = show(display, summary)
             shown = summary
         elif display is not None:
             live_indicator = not live_indicator
             display.letter(deviceId=DEVICE_ID,
                            position=1,
-                           char=summary[-1],
+                           char=on_display[-1],
                            dot=live_indicator,
                            redraw=True)
         time.sleep(ONE_SECOND)

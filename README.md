@@ -23,9 +23,12 @@ Netatmo pushes new measurements (roughly every 10 min) to the app as [webhooks](
 * At startup the current temperatures are read once from the station, so the display doesn't have to wait for the first webhook.
 * Run with `--debug` to log every event received.
 
-Display errors:
-* `E0`: no reading from the module for 30 min
-* `E2`: text too long for the display
+Display texts:
+* `no dAtA`: no temperatures received yet
+* `oLd dAtA`: nothing new from either module for 30 min
+* `----` in one half: that module hasn't reported yet
+* `oLd` in one half: that module hasn't reported for 30 min
+* `Err`: text too long for the display
 
 ## Start from cron
 ```
