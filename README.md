@@ -8,11 +8,24 @@ App is typically started from a script, e.g:
 
 export PYTHONPATH=$PYTHONPATH:<PathToZeroSeg>
 
-python3 NetatmoWeatherDisplay.py --username <username> --password <password> --client_id <client_id> --client_secret <client_secret>
+python3 NetatmoWeatherDisplay.py --client_id <client_id> --client_secret <client_secret> --webhook_url https://<public-host>/netatmo
 
 ```
 
 Generate token from netatmo web page and add to file: token.txt
+
+## Webhooks
+Netatmo pushes new measurements (roughly every 10 min) to the app as [webhooks](https://dev.netatmo.com/apidocumentation/webhooks) instead of the app polling for them. The app receives them on port 8080 (change with `--listen` / `--port`), checks the `X-Netatmo-secret` signature against the client secret, and updates the display.
+
+* Netatmo must be able to reach the Pi from the internet, preferably over HTTPS, e.g. with Tailscale Funnel (`sudo tailscale funnel --bg 8080`), a Cloudflare Tunnel, or a port forward on the router.
+* `--webhook_url` registers the URL for your user at startup. Alternatively set the webhook URL in the app settings on dev.netatmo.com, and then generate a new token, since Netatmo links the webhook when the app is authorized.
+* `curl https://<public-host>/netatmo` should answer `ok` when the Pi is reachable.
+* At startup the current temperatures are read once from the station, so the display doesn't have to wait for the first webhook.
+* Run with `--debug` to log every event received.
+
+Display errors:
+* `E0`: no reading from the module for 30 min
+* `E2`: text too long for the display
 
 ## Start from cron
 ```
