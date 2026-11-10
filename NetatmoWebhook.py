@@ -53,8 +53,11 @@ class WeatherState:
             self.__module_ids[role] = module_id
 
     def set_reading(self, role, temperature, timestamp):
+        """Store a reading, unless a newer one has already arrived by webhook."""
         with self.__lock:
-            self.__readings[role] = (temperature, timestamp)
+            current = self.__readings.get(role)
+            if current is None or timestamp >= current[1]:
+                self.__readings[role] = (temperature, timestamp)
 
     def get(self, role):
         with self.__lock:

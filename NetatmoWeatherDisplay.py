@@ -1,6 +1,9 @@
 import argparse
+import itertools
 import logging
+import threading
 import time
+from urllib.parse import urlparse
 
 import requests
 
@@ -19,6 +22,8 @@ MODULE_NAMES = {'indoor': 'Indoor', 'outdoor': 'Outdoor'}
 
 # Stations report every ~10 min. Show E0 rather than a temperature older than this (secs)
 STALE_AFTER = 30 * 60
+# Wait between retries of failed startup calls to Netatmo (secs). The last one repeats
+RETRY_DELAYS = [30, 60, 120, 300]
 ONE_SECOND = 1
 ZERO_SEG_MAX_CHARS = 8
 DEVICE_ID = 0
@@ -83,11 +88,24 @@ def show(display, summary):
 
 
 def describe(error):
-    """Netatmo explains failures in the response body, which HTTPError's message leaves out."""
+    """
+    Which Netatmo call failed, and why. Netatmo explains failures in the
+    response body, which HTTPError's message leaves out.
+    """
+    request = getattr(error, 'request', None)
+    where = '{0} {1}: '.format(request.method, urlparse(request.url).path) if request is not None else ''
     response = getattr(error, 'response', None)
     if response is not None:
-        return '{0} {1}'.format(response.status_code, response.text)
-    return repr(error)
+        return where + '{0} {1}'.format(response.status_code, response.text)
+    return where + repr(error)
+
+
+def is_transient(error):
+    """Timeouts, connection problems, 5xx and 429 may go away. Other errors, like a rejected token, won't."""
+    response = getattr(error, 'response', None)
+    if response is None:
+        return isinstance(error, requests.exceptions.RequestException)
+    return response.status_code >= 500 or response.status_code == 429
 
 
 def seed_from_station(netatmo, state):
@@ -95,12 +113,16 @@ def seed_from_station(netatmo, state):
     Look up which module ids are named Indoor/Outdoor and show their current
     temperature right away, instead of E0 until the first webhook (up to ~10
     min). The app still works if this fails: modules are then picked by type.
+    Returns False if it should be retried.
     """
+    if state.get('indoor') and state.get('outdoor'):
+        # Webhooks got there first, nothing left to seed
+        return True
     try:
         modules = netatmo.get_modules()
     except (requests.exceptions.RequestException, KeyError, IndexError, ValueError) as error:
-        log.warning('Could not get station data, waiting for first webhook: %s', describe(error))
-        return
+        log.warning('Could not get station data: %s', describe(error))
+        return not is_transient(error)
 
     for role, name in MODULE_NAMES.items():
         module = modules.get(name)
@@ -110,6 +132,42 @@ def seed_from_station(netatmo, state):
         state.set_module_id(role, module['id'])
         if module['temperature'] is not None:
             state.set_reading(role, module['temperature'], module['time'] or time.time())
+    return True
+
+
+def register_webhook(netatmo, url):
+    """Returns False if it should be retried."""
+    try:
+        netatmo.register_webhook(url)
+    except requests.exceptions.RequestException as error:
+        log.error('Could not register webhook %s: %s', url, describe(error))
+        return not is_transient(error)
+    log.debug('Registered webhook %s', url)
+    return True
+
+
+def retry(tasks):
+    for delay in itertools.chain(RETRY_DELAYS, itertools.repeat(RETRY_DELAYS[-1])):
+        log.warning('Retrying Netatmo in %d s', delay)
+        time.sleep(delay)
+        tasks = [task for task in tasks if not task()]
+        if not tasks:
+            log.warning('Netatmo retry succeeded')
+            return
+
+
+def connect_to_netatmo(netatmo, state, webhook_url):
+    """
+    Seed the display and register the webhook. If Netatmo can't be reached,
+    keep retrying on a background thread, since without the registration no
+    webhooks will arrive.
+    """
+    tasks = [lambda: seed_from_station(netatmo, state)]
+    if webhook_url:
+        tasks.append(lambda: register_webhook(netatmo, webhook_url))
+    tasks = [task for task in tasks if not task()]
+    if tasks:
+        threading.Thread(target=retry, args=(tasks,), name='netatmo-retry', daemon=True).start()
 
 
 def main():
@@ -151,14 +209,7 @@ def main():
     start_webhook_server(args.listen, args.port, args.client_secret, state.apply_event)
     log.debug('Listening for webhooks on %s:%d', args.listen, args.port)
 
-    seed_from_station(netatmo, state)
-
-    if args.webhook_url:
-        try:
-            netatmo.register_webhook(args.webhook_url)
-            log.debug('Registered webhook %s', args.webhook_url)
-        except requests.exceptions.RequestException as error:
-            log.error('Could not register webhook %s: %s', args.webhook_url, describe(error))
+    connect_to_netatmo(netatmo, state, args.webhook_url)
 
     # Redraw when the readings change, otherwise blink a dot every second as
     # 'live indicator'. If app stops, the last text on display stays on the display.
