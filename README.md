@@ -21,6 +21,7 @@ Netatmo pushes new measurements (roughly every 10 min) to the app as [webhooks](
 * `--webhook_url` registers the URL for your user at startup. Alternatively set the webhook URL in the app settings on dev.netatmo.com, and then generate a new token, since Netatmo links the webhook when the app is authorized.
 * `curl https://<public-host>/netatmo` should answer `ok` when the Pi is reachable.
 * At startup the current temperatures are read once from the station, so the display doesn't have to wait for the first webhook.
+* If no webhook delivers a temperature for 15 min, the app falls back to reading the station every 10 min like before, and stops again when webhooks arrive.
 * Run with `--debug` to log every event received.
 
 Display texts:

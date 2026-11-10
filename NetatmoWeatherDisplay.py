@@ -27,6 +27,11 @@ MODULE_NAMES = {'indoor': 'Indoor', 'outdoor': 'Outdoor'}
 STALE_AFTER = 30 * 60
 # Wait between retries of failed startup calls to Netatmo (secs). The last one repeats
 RETRY_DELAYS = [30, 60, 120, 300]
+# While no webhook has delivered a temperature for WEBHOOK_QUIET, read the
+# station every POLL_INTERVAL instead, like before webhooks (secs)
+WEBHOOK_QUIET = 15 * 60
+POLL_INTERVAL = 10 * 60
+POLL_CHECK = 60
 ONE_SECOND = 1
 ZERO_SEG_MAX_CHARS = 8
 DEVICE_ID = 0
@@ -123,22 +128,15 @@ def is_transient(error):
     return response.status_code >= 500 or response.status_code == 429
 
 
-def seed_from_station(netatmo, state):
-    """
-    Look up which module ids are named Indoor/Outdoor and show their current
-    temperature right away, instead of E0 until the first webhook (up to ~10
-    min). The app still works if this fails: modules are then picked by type.
-    Returns False if it should be retried.
-    """
-    if state.get('indoor') and state.get('outdoor'):
-        log.info('Webhooks already gave both temperatures, skipping station data')
-        return True
-    try:
-        modules = netatmo.get_modules()
-    except (requests.exceptions.RequestException, KeyError, IndexError, ValueError) as error:
-        log.warning('Could not get station data: %s', describe(error))
-        return not is_transient(error)
+STATION_ERRORS = (requests.exceptions.RequestException, KeyError, IndexError, ValueError)
 
+
+def update_from_station(netatmo, state):
+    """
+    Read the current temperatures from the station, and which module ids are
+    named Indoor/Outdoor. Raises one of STATION_ERRORS on failure.
+    """
+    modules = netatmo.get_modules()
     log.info('Station modules: %s', ', '.join('{0} ({1}, {2})'.format(name, module['type'], module['temperature'])
                                                for name, module in modules.items()))
     for role, name in MODULE_NAMES.items():
@@ -149,7 +147,51 @@ def seed_from_station(netatmo, state):
         state.set_module_id(role, module['id'])
         if module['temperature'] is not None:
             state.set_reading(role, module['temperature'], module['time'] or time.time())
+
+
+def seed_from_station(netatmo, state):
+    """
+    Show the current temperatures right away, instead of 'no dAtA' until the
+    first webhook (up to ~10 min). The app still works if this fails: modules
+    are then picked by type. Returns False if it should be retried.
+    """
+    if state.get('indoor') and state.get('outdoor'):
+        log.info('Webhooks already gave both temperatures, skipping station data')
+        return True
+    try:
+        update_from_station(netatmo, state)
+    except STATION_ERRORS as error:
+        log.warning('Could not get station data: %s', describe(error))
+        return not is_transient(error)
     return True
+
+
+def poll_while_webhooks_are_quiet(netatmo, state):
+    """
+    Fallback for when webhooks don't arrive: read the station every
+    POLL_INTERVAL, until a webhook delivers a temperature again.
+    """
+    started = time.time()
+    last_poll = 0
+    polling = False
+    while True:
+        time.sleep(POLL_CHECK)
+        quiet_for = time.time() - (state.last_webhook() or started)
+        if quiet_for < WEBHOOK_QUIET:
+            if polling:
+                log.info('Webhooks are arriving again, stopped polling')
+                polling = False
+            continue
+        if not polling:
+            log.warning('No temperature from webhooks for %d min, polling Netatmo every %d min',
+                        quiet_for // 60, POLL_INTERVAL // 60)
+            polling = True
+        if time.time() - last_poll >= POLL_INTERVAL:
+            last_poll = time.time()
+            try:
+                update_from_station(netatmo, state)
+            except STATION_ERRORS as error:
+                log.warning('Could not get station data: %s', describe(error))
 
 
 def register_webhook(netatmo, url):
@@ -233,6 +275,8 @@ def main():
     start_webhook_server(args.listen, args.port, args.client_secret, state.apply_event)
 
     connect_to_netatmo(netatmo, state, args.webhook_url)
+    threading.Thread(target=poll_while_webhooks_are_quiet, args=(netatmo, state),
+                     name='netatmo-poll', daemon=True).start()
     log.info('Waiting for webhooks...')
 
     # Redraw when the readings change, otherwise blink a dot every second as

@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 
 import requests
@@ -22,8 +23,15 @@ class NetatmoAccess:
         self.__token_file = token_file
         self.__access_token = None
         self.__access_token_expires = 0
+        # Netatmo invalidates a refresh token once used, so two threads must
+        # not refresh at the same time
+        self.__token_lock = threading.Lock()
 
     def __auth_header(self):
+        with self.__token_lock:
+            return self.__auth_header_locked()
+
+    def __auth_header_locked(self):
         if self.__access_token is None or time.time() >= self.__access_token_expires:
             log.info("Refreshing access token...")
             payload = {'grant_type':    'refresh_token',

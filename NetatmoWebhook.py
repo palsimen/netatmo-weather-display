@@ -47,6 +47,7 @@ class WeatherState:
         self.__lock = threading.Lock()
         self.__module_ids = {}
         self.__readings = {}
+        self.__last_webhook = None
 
     def set_module_id(self, role, module_id):
         with self.__lock:
@@ -62,6 +63,11 @@ class WeatherState:
     def get(self, role):
         with self.__lock:
             return self.__readings.get(role)
+
+    def last_webhook(self):
+        """When a webhook last delivered a temperature (unix time), or None."""
+        with self.__lock:
+            return self.__last_webhook
 
     def __role_for(self, module):
         module_id = module.get('id')
@@ -100,6 +106,7 @@ class WeatherState:
                     continue
                 log.info("  %s %s (%s): %.1f", module.get('type'), module.get('id'), role, temperature)
                 self.__readings[role] = (temperature, now)
+                self.__last_webhook = now
 
 
 class _Handler(BaseHTTPRequestHandler):
