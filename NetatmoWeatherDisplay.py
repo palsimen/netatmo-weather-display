@@ -79,7 +79,7 @@ def show(display, summary):
         print(summary, flush=True)
     # Display on zero seg
     else:
-        log.debug('Updating zero seg: %s', summary)
+        log.info("Showing '%s'", summary)
         display.clear()
         try:
             write_display(display, summary)
@@ -116,7 +116,7 @@ def seed_from_station(netatmo, state):
     Returns False if it should be retried.
     """
     if state.get('indoor') and state.get('outdoor'):
-        # Webhooks got there first, nothing left to seed
+        log.info('Webhooks already gave both temperatures, skipping station data')
         return True
     try:
         modules = netatmo.get_modules()
@@ -124,6 +124,8 @@ def seed_from_station(netatmo, state):
         log.warning('Could not get station data: %s', describe(error))
         return not is_transient(error)
 
+    log.info('Station modules: %s', ', '.join('{0} ({1}, {2})'.format(name, module['type'], module['temperature'])
+                                               for name, module in modules.items()))
     for role, name in MODULE_NAMES.items():
         module = modules.get(name)
         if module is None:
@@ -142,7 +144,7 @@ def register_webhook(netatmo, url):
     except requests.exceptions.RequestException as error:
         log.error('Could not register webhook %s: %s', url, describe(error))
         return not is_transient(error)
-    log.debug('Registered webhook %s', url)
+    log.info('Registered webhook %s', url)
     return True
 
 
@@ -185,12 +187,16 @@ def main():
 
     logging.basicConfig(
       format='%(asctime)s %(levelname)-8s %(message)s',
-      level=logging.DEBUG if args.debug else logging.WARNING,
+      level=logging.DEBUG if args.debug else logging.INFO,
       datefmt='%Y-%m-%d %H:%M:%S')
+    log.info('Starting %s (display: %s, webhook url: %s)', NAME,
+             'terminal' if args.nodisplay else 'zero seg',
+             args.webhook_url or 'from app settings on dev.netatmo.com')
 
     # Read token from file
     with open(args.token_file, "r") as f:
         refresh_token = f.read().rstrip()
+    log.info('Read refresh token from %s', args.token_file)
     netatmo = NetatmoAccess(client_id=args.client_id,
                             client_secret=args.client_secret,
                             refresh_token=refresh_token,
@@ -207,9 +213,9 @@ def main():
     state = WeatherState()
     # Listen before registering, so the endpoint is up when Netatmo starts sending
     start_webhook_server(args.listen, args.port, args.client_secret, state.apply_event)
-    log.debug('Listening for webhooks on %s:%d', args.listen, args.port)
 
     connect_to_netatmo(netatmo, state, args.webhook_url)
+    log.info('Waiting for webhooks...')
 
     # Redraw when the readings change, otherwise blink a dot every second as
     # 'live indicator'. If app stops, the last text on display stays on the display.

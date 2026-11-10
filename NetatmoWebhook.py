@@ -77,26 +77,28 @@ class WeatherState:
 
     def apply_event(self, event):
         push_type = event.get('push_type')
+        modules = (event.get('extra_params') or {}).get('modules') or []
         if push_type != 'device_event':
-            log.info("Ignoring '%s' event", push_type)
+            log.info("Received '%s' event, nothing to do", push_type)
             return
+        log.info("Received device_event with %d module(s)", len(modules))
 
         # Out-of-order or duplicate deliveries are not handled (sequence_id is
         # ignored): Netatmo only retries for seconds, while weather modules
         # report every ~10 minutes, so a retry can't overwrite a newer reading.
         now = time.time()
         with self.__lock:
-            for module in (event.get('extra_params') or {}).get('modules') or []:
+            for module in modules:
                 role = self.__role_for(module)
                 if role is None:
-                    log.debug("Ignoring module %s (%s)", module.get('id'), module.get('type'))
+                    log.info("  %s %s: not indoor/outdoor, skipped", module.get('type'), module.get('id'))
                     continue
                 temperature = module_temperature(module)
                 if temperature is None:
-                    log.warning("No temperature in %s module %s, fields: %s",
-                                role, module.get('id'), ', '.join(sorted(module)))
+                    log.warning("  %s %s (%s): no temperature, fields: %s",
+                                module.get('type'), module.get('id'), role, ', '.join(sorted(module)))
                     continue
-                log.info("%s: %.1f", role, temperature)
+                log.info("  %s %s (%s): %.1f", module.get('type'), module.get('id'), role, temperature)
                 self.__readings[role] = (temperature, now)
 
 
@@ -106,6 +108,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         # Handy for checking from outside that the URL reaches the Pi
+        log.info("Health check from %s", self.client_address[0])
         self.__reply(200, b"ok\n")
 
     def do_POST(self):
@@ -161,4 +164,5 @@ def start_webhook_server(host, port, client_secret, on_event):
     server.client_secret = client_secret
     server.on_event = on_event
     threading.Thread(target=server.serve_forever, name='webhook-server', daemon=True).start()
+    log.info("Listening for webhooks on %s:%d", host, server.server_address[1])
     return server

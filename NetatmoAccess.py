@@ -25,7 +25,7 @@ class NetatmoAccess:
 
     def __auth_header(self):
         if self.__access_token is None or time.time() >= self.__access_token_expires:
-            log.debug("Getting token...")
+            log.info("Refreshing access token...")
             payload = {'grant_type':    'refresh_token',
                        'refresh_token': self.__refresh_token,
                        'client_id':     self.__client_id,
@@ -39,7 +39,8 @@ class NetatmoAccess:
             self.__refresh_token = body["refresh_token"]
             with open(self.__token_file, "w") as f:
                 f.write(self.__refresh_token)
-            log.debug("...got new access token")
+            log.info("...got access token valid for %d min, saved new refresh token to %s",
+                     body.get("expires_in", 0) // 60, self.__token_file)
         return {'Authorization': 'Bearer ' + self.__access_token}
 
     def get_modules(self):
@@ -47,7 +48,9 @@ class NetatmoAccess:
         Return {module_name: {'id', 'type', 'temperature', 'time'}} for the
         station's base module and all its modules.
         """
-        response = requests.post(STATIONS_DATA_URL, headers=self.__auth_header(), timeout=REQUEST_TIMEOUT)
+        headers = self.__auth_header()
+        log.info("Getting station data...")
+        response = requests.post(STATIONS_DATA_URL, headers=headers, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
         base = response.json()["body"]["devices"][0]
 
@@ -67,7 +70,10 @@ class NetatmoAccess:
         POST (append) so restarting the app doesn't pile up registrations until
         Netatmo's per-app limit is hit.
         """
-        response = requests.put(WEBHOOKS_URL, json=[{'url': url}],
-                                headers=self.__auth_header(), timeout=REQUEST_TIMEOUT)
+        headers = self.__auth_header()
+        log.info("Registering webhook %s...", url)
+        response = requests.put(WEBHOOKS_URL, json=[{'url': url}], headers=headers, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
-        return response.json().get('body', [])
+        body = response.json().get('body', [])
+        log.debug("Netatmo webhooks for this user: %s", body)
+        return body
