@@ -64,16 +64,33 @@ class NetatmoAccess:
                                               'time': dashboard.get('time_utc')}
         return modules
 
+    def __webhooks(self, method, payload=None):
+        headers = self.__auth_header()
+        response = requests.request(method, WEBHOOKS_URL, json=payload, headers=headers, timeout=REQUEST_TIMEOUT)
+        log.debug("%s /webhooks/v1/ -> %d %s", method, response.status_code, response.text)
+        response.raise_for_status()
+        try:
+            body = response.json()
+        except ValueError:
+            return None
+        return body.get('body') if isinstance(body, dict) else None
+
+    def get_webhooks(self):
+        """The URLs Netatmo sends this user's events to."""
+        return [webhook.get('url') for webhook in self.__webhooks('GET') or [] if isinstance(webhook, dict)]
+
     def register_webhook(self, url):
         """
-        Make url the webhook for this user. Uses PUT (replace all) rather than
-        POST (append) so restarting the app doesn't pile up registrations until
-        Netatmo's per-app limit is hit.
+        Make url the webhook for this user, and return the URLs Netatmo has
+        afterwards. Uses PUT (replace all) rather than POST (append) so
+        restarting the app doesn't pile up registrations until Netatmo's
+        per-app limit is hit. Falls back to POST if PUT didn't store it.
         """
-        headers = self.__auth_header()
         log.info("Registering webhook %s...", url)
-        response = requests.put(WEBHOOKS_URL, json=[{'url': url}], headers=headers, timeout=REQUEST_TIMEOUT)
-        response.raise_for_status()
-        body = response.json().get('body', [])
-        log.debug("Netatmo webhooks for this user: %s", body)
-        return body
+        self.__webhooks('PUT', [{'url': url}])
+        urls = self.get_webhooks()
+        if url not in urls:
+            log.warning("Webhook not stored after PUT (Netatmo has: %s), trying POST", urls)
+            self.__webhooks('POST', {'url': url})
+            urls = self.get_webhooks()
+        return urls

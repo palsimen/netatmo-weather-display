@@ -155,11 +155,14 @@ def seed_from_station(netatmo, state):
 def register_webhook(netatmo, url):
     """Returns False if it should be retried."""
     try:
-        netatmo.register_webhook(url)
+        urls = netatmo.register_webhook(url)
     except requests.exceptions.RequestException as error:
         log.error('Could not register webhook %s: %s', url, describe(error))
         return not is_transient(error)
-    log.info('Registered webhook %s', url)
+    if url in urls:
+        log.info('Registered webhook %s, Netatmo has: %s', url, ', '.join(urls))
+    else:
+        log.error('Netatmo did not store webhook %s, it has: %s', url, ', '.join(urls) or 'none')
     return True
 
 
