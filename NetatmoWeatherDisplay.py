@@ -153,7 +153,7 @@ def seed_from_station(netatmo, state):
     """
     Show the current temperatures right away, instead of 'no dAtA' until the
     first webhook (up to ~10 min). The app still works if this fails: modules
-    are then picked by type. Returns False if it should be retried.
+    are then recognized by id. Returns False if it should be retried.
     """
     if state.get('indoor') and state.get('outdoor'):
         log.info('Webhooks already gave both temperatures, skipping station data')

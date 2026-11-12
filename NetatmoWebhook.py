@@ -15,8 +15,19 @@ log = logging.getLogger(__name__)
 
 # Events are small; refuse anything absurd instead of reading it into memory
 MAX_BODY_BYTES = 1024 * 1024
-# Used to pick out the modules when their ids couldn't be looked up by name at startup
-FALLBACK_TYPES = {'indoor': 'NAMain', 'outdoor': 'NAModule1'}
+# Weather webhooks don't say which type a module is. So when the module ids
+# couldn't be looked up by name at startup, recognize them by id instead: the
+# base station (indoor) has the event's device_id, and outdoor modules' ids
+# start with 02: (rain modules are 05:, extra indoor modules 03:, wind 06:)
+OUTDOOR_ID_PREFIX = '02:'
+
+
+def guess_role(module_id, device_id):
+    if module_id == device_id:
+        return 'indoor'
+    if module_id.startswith(OUTDOOR_ID_PREFIX):
+        return 'outdoor'
+    return None
 
 
 def signature_is_valid(raw_body, client_secret, signature):
@@ -69,17 +80,17 @@ class WeatherState:
         with self.__lock:
             return self.__last_webhook
 
-    def __role_for(self, module):
-        module_id = module.get('id')
+    def __role_for(self, module, device_id):
+        module_id = module.get('id') or ''
         for role, known_id in self.__module_ids.items():
             if known_id == module_id:
                 return role
-        for role, module_type in FALLBACK_TYPES.items():
-            if role not in self.__module_ids and module.get('type') == module_type:
-                log.info("Using %s module %s as %s", module_type, module_id, role)
-                self.__module_ids[role] = module_id
-                return role
-        return None
+        role = guess_role(module_id, device_id)
+        if role is None or role in self.__module_ids:
+            return None
+        log.info("Using module %s as %s", module_id, role)
+        self.__module_ids[role] = module_id
+        return role
 
     def apply_event(self, event):
         push_type = event.get('push_type')
@@ -95,16 +106,16 @@ class WeatherState:
         now = time.time()
         with self.__lock:
             for module in modules:
-                role = self.__role_for(module)
+                role = self.__role_for(module, event.get('device_id'))
                 if role is None:
-                    log.info("  %s %s: not indoor/outdoor, skipped", module.get('type'), module.get('id'))
+                    log.info("  %s: not indoor/outdoor, skipped", module.get('id'))
                     continue
                 temperature = module_temperature(module)
                 if temperature is None:
-                    log.warning("  %s %s (%s): no temperature, fields: %s",
-                                module.get('type'), module.get('id'), role, ', '.join(sorted(module)))
+                    log.warning("  %s (%s): no temperature, fields: %s",
+                                module.get('id'), role, ', '.join(sorted(module)))
                     continue
-                log.info("  %s %s (%s): %.1f", module.get('type'), module.get('id'), role, temperature)
+                log.info("  %s (%s): %.1f", module.get('id'), role, temperature)
                 self.__readings[role] = (temperature, now)
                 self.__last_webhook = now
 
